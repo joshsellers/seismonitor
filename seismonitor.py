@@ -37,7 +37,7 @@ class Client(SLClient):
         self.args = myargs
 
     def packet_handler(self, count, slpack):
-        print(f'packet in @{UTCDateTime().timestamp}')
+        print(f'packet in @{UTCDateTime()}')
         # check if not a complete packet
         if slpack is None or (slpack == SLPacket.SLNOPACKET) or \
                 (slpack == SLPacket.SLERROR):
@@ -119,7 +119,7 @@ pygame.font.init()
 if pygame_modules_have_loaded():
     screen = pygame.display.set_mode(SCREEN_SIZE)
     game_screen = pygame.Surface(WORLD_SIZE)
-    pygame.display.set_caption("test")
+    pygame.display.set_caption("seismonitor")
     clock = pygame.time.Clock()
     pygame.show_fps = False
 
@@ -134,11 +134,19 @@ if pygame_modules_have_loaded():
             sys.exit()
         elif key_name == "f3":
             pygame.show_fps = not pygame.show_fps
+            
 
     AVERAGES = {}
     last_notification_time = 0
+    capture_screen = False
     def update(game_screen, time, stream):
+        global capture_screen
         global last_notification_time
+        
+        if capture_screen:
+            pygame.image.save(screen, f"capture@{UTCDateTime()}.png")
+            capture_screen = False
+        
         pygame.draw.rect(game_screen, 0x000000, (0, 0, WORLD_SIZE[0], WORLD_SIZE[1]))
 
         traces = stream.traces
@@ -170,17 +178,19 @@ if pygame_modules_have_loaded():
                 notification_threshold = 200
                 try:
                     if abs(AVERAGES[trace.id] - tr) > notification_threshold\
-                            and current_milli_time() - last_notification_time > 10000:
+                            and current_milli_time() - last_notification_time > 60 * 5 * 1000:
                         message = f'{LOCATIONS[trace.id]} breached threshold'
                         print(message)
                         pushover_req = {'token': APP_TOKEN, 'user': USER_TOKEN, 'title': title, 'message': message}
                         requests.post(url, data=pushover_req)
                         last_notification_time = current_milli_time()
+                        
+                        capture_screen = True
                 except KeyError:
                     pass
 
             AVERAGES[trace.id] = total / len(trace)
-
+            
             loc_font = pygame.font.SysFont('Courier New', 12)
             loc_label = loc_font.render(f'{trace.id} ({LOCATIONS[trace.id]})', False, (0xff, 0xff, 0xff), (0, 0, 0))
             screen.blit(loc_label, (10, midpoint + spacing * index))
